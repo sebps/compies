@@ -2,6 +2,8 @@
   "name": "compies",
   "version": "0.0.1",
   "type": "module",
+  "author": "sebps",
+  "licence": "MIT",
   "main": "dist/compies.umd.js",
   "module": "dist/compies.es.js",
   "exports": {

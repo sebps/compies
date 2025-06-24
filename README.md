@@ -22,7 +22,9 @@ yarn add compies
 Import and use the components in your project:
 
 ```jsx
-import { LlmChat } from 'compies';
+import { LlmChat, Terminal } from 'compies';
+
+import "compies/style";
 
 function App() {
     return (
