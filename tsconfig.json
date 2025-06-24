@@ -1,0 +1,18 @@
+{
+  "compilerOptions": {
+    "outDir": "temp", // Output folder
+    "declaration": true, // Generate TypeScript declaration files
+    "emitDeclarationOnly": true, // Only generate declaration files
+    "skipLibCheck": true, // Skip type checking of declaration files in node_modules
+    "module": "esnext", // Use ES Modules
+    "target": "esnext", // Compile to modern JavaScript
+    "jsx": "react", // Support JSX syntax
+    "strict": true, // Enable all strict type-checking options
+    "esModuleInterop": true, // Allow default imports from CommonJS modules
+    "moduleResolution": "node", // Use Node.js module resolution
+    "removeComments": true, // Remove comments from the output
+    "rootDir": "src" // Specify the root directory of input files
+  },
+  "include": ["src/index.ts"], // Include only the entry point
+  "exclude": ["node_modules", "dist.old", "src/**/*.test.tsx", "src/**/*.stories.tsx"] // Exclude unnecessary files
+}

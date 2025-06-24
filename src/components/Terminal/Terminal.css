@@ -1,0 +1,82 @@
+/* Desktop frame styles */
+.desktop-frame {
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+  }
+  
+  .desktop-header {
+    background-color: #e0e0e0;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    padding-left: 8px;
+    gap: 8px;
+    border-bottom: 1px solid #ccc;
+  }
+  
+  .desktop-button {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    display: inline-block;
+  }
+  
+  .desktop-button.red {
+    background-color: #ff5f57;
+  }
+  
+  .desktop-button.yellow {
+    background-color: #ffbd2e;
+  }
+  
+  .desktop-button.green {
+    background-color: #28c940;
+  }
+  
+  /* Terminal container */
+  .terminal-container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    width: 100%;
+    text-align: left !important;
+  }
+  
+  .terminal {
+    flex: 1;
+    overflow-y: auto;
+    background: #000;
+    color: #0f0;
+    padding: 10px;
+    font-family: monospace;
+    font-size: 14px;
+  }
+  
+  .terminal-output {
+    white-space: pre-wrap;
+    word-wrap: break-word;
+  }
+  
+  .terminal-input-wrapper {
+    display: flex;
+    align-items: center;
+  }
+  
+  .terminal-input {
+    background: transparent;
+    color: #0f0;
+    border: none;
+    outline: none;
+    flex: 1;
+    font-family: monospace;
+    font-size: 14px;
+  }
+  
+  .terminal-prefix {
+    margin-right: 5px;
+  }
+  
