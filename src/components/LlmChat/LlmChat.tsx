@@ -2,6 +2,8 @@ import React, { useState, useMemo, useRef } from 'react';
 import { OpenAI } from 'openai';
 import { ChatCompletionMessageParam } from 'openai/resources/chat/completions/completions';
 
+import './LlmChat.css'; // Assuming you have some styles defined in this file
+
 interface LLM {
   name: string;
   baseUri: string;
@@ -55,6 +57,7 @@ export const LlmChat: React.FC<LlmChatProps> = ({
     normalizedLLMs.length > 0 ? normalizedLLMs[0] : null
   );
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   const historyRef = useRef<ChatCompletionMessageParam[]>(
     withPrompt && prompt ? [{ role: 'system', content: prompt }] : []
@@ -80,7 +83,7 @@ export const LlmChat: React.FC<LlmChatProps> = ({
   };
 
   const handleSubmit = async () => {
-    if (!input.trim()) return;
+    if (!input.trim() || loading) return;
 
     const client = getCurrentClient();
     const currentModel = getCurrentModel();
@@ -93,6 +96,7 @@ export const LlmChat: React.FC<LlmChatProps> = ({
     const userMessage: ChatCompletionMessageParam = { role: 'user', content: input };
     const messages: ChatCompletionMessageParam[] = [...historyRef.current, userMessage];
 
+    setLoading(true); // Set loading to true
     try {
       const response = await client.chat.completions.create({
         model: currentModel,
@@ -109,6 +113,8 @@ export const LlmChat: React.FC<LlmChatProps> = ({
       setInput('');
     } catch (err) {
       console.error('Chat completion error:', err);
+    } finally {
+      setLoading(false); // Set loading to false
     }
   };
 
@@ -161,6 +167,7 @@ export const LlmChat: React.FC<LlmChatProps> = ({
           }}
           placeholder={placeholder || 'Type your message...'}
           rows={2}
+          disabled={loading} // Disable textarea while loading
           style={{
             flex: 1,
             resize: 'none',
@@ -175,6 +182,7 @@ export const LlmChat: React.FC<LlmChatProps> = ({
         />
         <button
           onClick={handleSubmit}
+          disabled={loading} // Disable button while loading
           style={{
             marginLeft: '0.5rem',
             padding: '0.5rem 1rem',
@@ -182,11 +190,28 @@ export const LlmChat: React.FC<LlmChatProps> = ({
             border: 'none',
             backgroundColor: primaryColor,
             color: '#fff',
-            cursor: 'pointer',
+            cursor: loading ? 'not-allowed' : 'pointer',
             fontWeight: 'bold',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
           }}
         >
-          Send
+            {loading ? (
+              <div
+                style={{
+                border: '2px solid transparent',
+                borderTop: `2px solid ${secondaryColor}`,
+                borderRight: `2px solid ${secondaryColor}`,
+                borderRadius: '50%',
+                width: '16px',
+                height: '16px',
+                animation: 'chat-spin 1s linear infinite',
+                }}
+              />
+            ) : (
+              'Send'
+            )}
         </button>
         {normalizedLLMs.length > 1 && (
           <div

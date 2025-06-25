@@ -40,3 +40,12 @@ select {
     margin-bottom: 1rem;
     border-radius: 6px;
 }
+
+@keyframes chat-spin {
+    0% {
+    transform: rotate(0deg);
+    }
+    100% {
+    transform: rotate(360deg);
+    }
+}
