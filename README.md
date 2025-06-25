@@ -48,6 +48,16 @@ function App() {
 }
 ```
 
+## Examples
+
+### Llm chat
+
+![Alt text](https://raw.githubusercontent.com/sebps/compies/main/assets/llm.png)
+
+### Terminal
+
+![Alt text](https://raw.githubusercontent.com/sebps/compies/main/assets/terminal.png)
+
 ## Storybook
 
 For detailed usage and customization options, visit the [storybook](https://compies.netlify.app).
