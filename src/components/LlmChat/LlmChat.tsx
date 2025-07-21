@@ -237,15 +237,15 @@ export const LlmChat: React.FC<LlmChatProps> = ({
               <div
                 style={{
                   position: 'absolute',
-                  top: '100%',
-                  left: '0',
+                  bottom: 0,
+                  right: 0,
                   backgroundColor: '#fff',
                   border: '1px solid #ccc',
                   borderRadius: '8px',
                   padding: '0.5rem',
                   boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
                   zIndex: 10,
-                  width: 'auto',
+                  width: '100%',
                 }}
               >
                 {normalizedLLMs.map((llm) => (
