@@ -3,30 +3,38 @@ import "./Terminal.css";
 
 export interface TerminalProps {
   websocketUrl?: string;
+  sseUrl?: string;
+  sseMethod?: string;
+  sseCommandParam?: string;
+  sseContentType?: string;
   initialContent?: string;
   initialCommands?: string[];
-  initialReturns?: (string | null)[]; // If null, the command is executed via onInput or WebSocket
+  initialReturns?: (string | null)[];
   onInput?: (input: string) => Promise<string>;
-  isControlled?: boolean;
-  mode?: "controlled" | "standard" | "websocket";
+  mode?: "controlled" | "standard" | "websocket" | "sse";
+  controlledOutput?: { prefix?: string; content: string }[];
   typingDelay?: number;
   commandDelay?: number;
-  websocketDelay?: number; // Delay before WebSocket connection is established
-  theme?: "standard" | "material" | "desktop"; // Theme for the terminal
+  websocketDelay?: number;
+  theme?: "standard" | "material" | "desktop";
   onconnect?: () => void;
   onclose?: () => void;
-  textColor?: string; // Custom text color
-  backgroundColor?: string; // Custom background color
+  textColor?: string;
+  backgroundColor?: string;
 }
 
 export const Terminal: React.FC<TerminalProps> = ({
   websocketUrl = "ws://localhost:12345/ws",
+  sseUrl = "http://localhost:12345/sse",
+  sseMethod = "GET",
+  sseCommandParam = "cmd",
+  sseContentType = "application/json",
   initialContent = "",
   initialCommands = [],
   initialReturns = [],
   onInput,
-  isControlled = false,
   mode = "standard",
+  controlledOutput = [],
   typingDelay = 100,
   commandDelay = 500,
   websocketDelay = 0,
@@ -37,172 +45,230 @@ export const Terminal: React.FC<TerminalProps> = ({
   backgroundColor = "#000",
 }) => {
   const [displayedOutput, setDisplayedOutput] = useState<{ prefix?: string; content: string }[]>([]);
-  const [input, setInput] = useState("");
-  const [prefix, setPrefix] = useState(mode === "standard" ? "$" : "");
-  const outputRef = useRef<HTMLDivElement | null>(null);
-  const inputRef = useRef<HTMLInputElement | null>(null);
+  const [inputLines, setInputLines] = useState<string[]>([""]);
+  const [printedLineCount, setPrintedLineCount] = useState(0);
+  const [wsPrompt, setWsPrompt] = useState<string>("");
+
+  const outputRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const websocketRef = useRef<WebSocket | null>(null);
+  const hasInitializedRef = useRef(false);
 
-  useEffect(() => {
-    if (inputRef.current) {
-      inputRef.current.focus();
-    }
-  });
+  const showInput = mode !== "controlled";
+  const getPrompt = (index: number) =>
+    mode === "websocket" ? wsPrompt : index === 0 ? "$" : ">";
 
-  useEffect(() => {
-    setDisplayedOutput([{ content: initialContent }]);
-
-    if (mode === "websocket") {
-      const connectWebSocket = async () => {
-        if (websocketDelay > 0) {
-          await new Promise((resolve) => setTimeout(resolve, websocketDelay));
-        }
-
-        websocketRef.current = new WebSocket(websocketUrl);
-
-        websocketRef.current.onopen = () => {
-          setDisplayedOutput((prev) => [...prev, { content: "WebSocket connection established." }]);
-          if (onconnect) onconnect();
-        };
-
-        websocketRef.current.onclose = () => {
-          setDisplayedOutput((prev) => [...prev, { content: "WebSocket connection closed." }]);
-          if (onclose) onclose();
-        };
-
-        websocketRef.current.onmessage = (e) => {
-          handleWebSocketMessage(e.data);
-        };
-      };
-
-      connectWebSocket();
-    }
-
-    return () => {
-      if (websocketRef.current) {
-        websocketRef.current.close();
-      }
-    };
-  }, [websocketUrl, mode, initialContent, onconnect, onclose, websocketDelay]);
-
-  const handleWebSocketMessage = (message: string) => {
-    let buffer = "";
-    let outputLines: string[] = [];
-
-    for (let i = 0; i < message.length; i++) {
-      const char = message[i];
-      const nextChar = message[i + 1];
-
-      if (char === "\r" && nextChar === "\n") {
-        outputLines.push(buffer);
-        buffer = "";
-        i++;
-        continue;
-      }
-
-      if (char === "\n") {
-        outputLines.push(buffer);
-        buffer = "";
-        continue;
-      }
-
-      if (char === "\r") {
-        buffer = "";
-        continue;
-      }
-
-      buffer += char;
-    }
-
-    if (buffer) {
-      outputLines.push(buffer);
-    }
-
-    updateTerminalOutput(outputLines);
-  };
-
-  const updateTerminalOutput = (lines: string[]) => {
-    setDisplayedOutput((prev) => {
-      const updatedOutput = [...prev];
-
-      lines.forEach((line, index) => {
-        if (index === lines.length - 1 && !line.includes("\n")) {
-          setPrefix(line);
-        } else {
-          updatedOutput.push({ content: line });
-        }
-      });
-
-      return updatedOutput;
-    });
-  };
-
-  const executeCommand = async (command: string) => {
-    if (command.trim().toLowerCase() === "clear") {
-      setDisplayedOutput([]);
-      setInput("");
-      return;
-    }
-
-    setDisplayedOutput((prev) => [...prev, { prefix, content: command }]);
-    setInput("");
-
-    if (mode === "websocket" && websocketRef.current) {
-      websocketRef.current.send(command + "\n");
-    } else if (onInput) {
-      const result = await onInput(command);
-      setDisplayedOutput((prev) => [...prev, { content: result }]);
-    }
-
-    if (inputRef.current) {
-      inputRef.current.focus();
-    }
-  };
-
-  const processInitialCommands = async () => {
-    for (let i = 0; i < initialCommands.length; i++) {
-      const command = initialCommands[i];
-      const returnValue = initialReturns[i];
-
-      // Simulate typing the command character by character
-      for (let j = 0; j < command.length; j++) {
-        setInput((prev) => prev + command[j]);
-        await new Promise((resolve) => setTimeout(resolve, typingDelay));
-      }
-
-      // Execute the command
-      if (returnValue !== null) {
-        setDisplayedOutput((prev) => [...prev, { prefix, content: command }, { content: returnValue }]);
-      } else {
-        await executeCommand(command);
-      }
-
-      setInput(""); // Clear the input
-      await new Promise((resolve) => setTimeout(resolve, commandDelay)); // Wait before typing the next command
-    }
-  };
-
-  useEffect(() => {
-    if (initialCommands.length > 0) {
-      processInitialCommands();
-    }
-  }, [initialCommands, initialReturns, typingDelay, commandDelay]);
-
+  // Scroll to bottom on new output
   useEffect(() => {
     if (outputRef.current) {
       outputRef.current.scrollTop = outputRef.current.scrollHeight;
     }
   }, [displayedOutput]);
 
+  // WebSocket or controlled init (run once)
+  useEffect(() => {
+    if (hasInitializedRef.current) return;
+    hasInitializedRef.current = true;
+
+    if (inputRef.current) {
+      inputRef.current.focus();
+    }
+
+    if (initialContent) {
+      setDisplayedOutput([{ content: initialContent }]);
+    }
+
+    if (mode === "controlled") return;
+
+    if (mode === "websocket") {
+      const connect = async () => {
+        if (websocketDelay > 0) {
+          await new Promise((r) => setTimeout(r, websocketDelay));
+        }
+
+        const ws = new WebSocket(websocketUrl);
+        websocketRef.current = ws;
+
+        ws.onopen = () => {
+          setDisplayedOutput((prev) => [...prev, { content: "WebSocket connection established." }]);
+          onconnect?.();
+        };
+
+        ws.onclose = () => {
+          setDisplayedOutput((prev) => [...prev, { content: "WebSocket connection closed." }]);
+          onclose?.();
+        };
+
+        ws.onmessage = (e) => {
+          const msg = e.data;
+          const lines = msg.split("\n");
+          const last = lines.pop() ?? "";
+          const output = lines.map((l:string) => ({ content: l }));
+          if (output.length) {
+            setDisplayedOutput((prev) => [...prev, ...output]);
+          }
+          setWsPrompt(last);
+        };
+      };
+
+      connect();
+    }
+
+    return () => {
+      websocketRef.current?.close();
+    };
+  }, [mode]);
+
+  // Controlled output update
+  useEffect(() => {
+    if (mode === "controlled") {
+      setDisplayedOutput((prev) => {
+        const newItems = controlledOutput.slice(prev.length);
+        return newItems.length > 0 ? [...prev, ...newItems] : prev;
+      });
+    }
+  }, [controlledOutput, mode]);
+
+  // Run initial commands (typing animation)
+  useEffect(() => {
+    if (!initialCommands.length || mode === "controlled") return;
+
+    const runInitialCommands = async () => {
+      for (let i = 0; i < initialCommands.length; i++) {
+        const cmd = initialCommands[i];
+        const ret = initialReturns[i];
+
+        for (let j = 0; j < cmd.length; j++) {
+          setInputLines([cmd.slice(0, j + 1)]);
+          await new Promise((r) => setTimeout(r, typingDelay));
+        }
+
+        if (ret !== null) {
+          setDisplayedOutput((prev) => [
+            ...prev,
+            { prefix: "$", content: cmd },
+            { content: ret },
+          ]);
+        } else {
+          await executeCommand(cmd);
+        }
+
+        setInputLines([""]);
+        await new Promise((r) => setTimeout(r, commandDelay));
+      }
+    };
+
+    runInitialCommands();
+  }, [initialCommands, initialReturns, typingDelay, commandDelay, mode]);
+
+  const executeCommand = async (cmd: string) => {
+    if (cmd.trim().toLowerCase() === "clear") {
+      setDisplayedOutput([]);
+      setInputLines([""]);
+      return;
+    }
+
+    if (mode === "websocket" && websocketRef.current) {
+      websocketRef.current.send(cmd + "\n");
+    } else if (mode === "sse" && sseUrl && sseCommandParam) {
+      const param = encodeURIComponent(sseCommandParam);
+      const encoded = encodeURIComponent(cmd);
+      const contentType = sseContentType || "application/x-www-form-urlencoded";
+
+      if (sseMethod === "POST") {
+        const body =
+          contentType === "application/json"
+            ? JSON.stringify({ [sseCommandParam]: cmd })
+            : `${param}=${encoded}`;
+
+        const res = await fetch(sseUrl, {
+          method: "POST",
+          headers: { "Content-Type": contentType },
+          body,
+        });
+
+        const reader = res.body?.getReader();
+        const decoder = new TextDecoder("utf-8");
+
+        if (reader) {
+          let buffer = "";
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split("\n");
+            buffer = lines.pop() || "";
+            lines.forEach((line) => {
+              if (line.trim().startsWith("data:")) {
+                const data = line.replace(/^data:\s*/, "");
+                setDisplayedOutput((prev) => [...prev, { content: data }]);
+              }
+            });
+          }
+        }
+      } else {
+        const url = `${sseUrl}?${param}=${encoded}`;
+        const es = new EventSource(url);
+        es.onmessage = (e) => setDisplayedOutput((prev) => [...prev, { content: e.data }]);
+        es.onerror = () => {
+          setDisplayedOutput((prev) => [...prev, { content: "[SSE connection closed]" }]);
+          es.close();
+        };
+      }
+    } else if (onInput) {
+      const result = await onInput(cmd);
+      setDisplayedOutput((prev) => [...prev, { content: result }]);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      const currentLine = inputLines[inputLines.length - 1];
+      const isContinued = currentLine.trimEnd().endsWith("\\");
+
+      if (isContinued) {
+        setDisplayedOutput((prev) => [
+          ...prev,
+          {
+            prefix: inputLines.length === 1 ? getPrompt(0) : ">",
+            content: currentLine,
+          },
+        ]);
+        setInputLines([...inputLines, ""]);
+        setPrintedLineCount((c) => c + 1);
+      } else {
+        const unprinted = inputLines.slice(printedLineCount);
+        unprinted.forEach((line, i) => {
+          setDisplayedOutput((prev) => [
+            ...prev,
+            {
+              prefix: i === 0 ? getPrompt(0) : ">",
+              content: line,
+            },
+          ]);
+        });
+
+        const fullCommand = inputLines
+          .map((line) =>
+            line.trimEnd().endsWith("\\") ? line.trimEnd().slice(0, -1) : line
+          )
+          .join("\n");
+
+        setInputLines([""]);
+        setPrintedLineCount(0);
+        executeCommand(fullCommand);
+      }
+    }
+  };
+
   return (
     <div
-      className={`terminal-container ${theme === "desktop" ? "desktop-frame" : ""}`}
-      style={{
-        backgroundColor,
-        color: textColor,
-      }}
+      className={`terminal-container ${
+        theme === "desktop" ? "desktop-frame" : ""
+      }`}
+      style={{ backgroundColor, color: textColor }}
     >
-      {/* Desktop-style frame */}
       {theme === "desktop" && (
         <div className="desktop-header">
           <span className="desktop-button red"></span>
@@ -210,63 +276,33 @@ export const Terminal: React.FC<TerminalProps> = ({
           <span className="desktop-button green"></span>
         </div>
       )}
-
-      <div
-        className="terminal"
-        ref={outputRef}
-        style={{
-          backgroundColor,
-          color: textColor,
-        }}
-      >
-        {displayedOutput.map((line, index) => (
-          <div
-            key={index}
-            className="terminal-output"
-            style={{
-              color: textColor,
-            }}
-          >
-            {line.prefix && (
-              <span
-                className="terminal-prefix"
-                style={{
-                  color: textColor,
-                }}
-              >
-                {line.prefix}
-              </span>
-            )}
+      <div className="terminal" ref={outputRef}>
+        {displayedOutput.map((line, idx) => (
+          <div key={idx} className="terminal-output">
+            {line.prefix && <span className="terminal-prefix">{line.prefix}</span>}
             {line.content}
           </div>
         ))}
-        <div className="terminal-input-wrapper">
-          {prefix && (
-            <span
-              className="terminal-prefix"
-              style={{
-                color: textColor,
-              }}
-            >
-              {prefix}
-            </span>
-          )}
-          <input
-            ref={inputRef}
-            className="terminal-input"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && input.trim()) {
-                executeCommand(input.trim());
-              }
-            }}
-            style={{
-              color: textColor,
-              backgroundColor: "transparent",
-            }}
-          />
-        </div>
+        {showInput &&
+          inputLines.map((line, idx) => (
+            <div key={idx} className="terminal-input-wrapper">
+              <span className="terminal-prefix" style={{ color: textColor }}>
+                {getPrompt(idx)}
+              </span>
+              <input
+                ref={idx === inputLines.length - 1 ? inputRef : null}
+                className="terminal-input"
+                value={line}
+                onChange={(e) => {
+                  const updated = [...inputLines];
+                  updated[idx] = e.target.value;
+                  setInputLines(updated);
+                }}
+                onKeyDown={handleKeyDown}
+                style={{ color: textColor, backgroundColor: "transparent" }}
+              />
+            </div>
+          ))}
       </div>
     </div>
   );
