@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from "react";
 import "./Terminal.css";
 
 export interface TerminalProps {
-  websocketUrl?: string;
   sseUrl?: string;
   sseMethod?: string;
   sseCommandParam?: string;
@@ -10,12 +9,21 @@ export interface TerminalProps {
   initialContent?: string;
   initialCommands?: string[];
   initialReturns?: (string | null)[];
+  initialTypings?: (string | null)[];
   onInput?: (input: string) => Promise<string>;
   mode?: "controlled" | "standard" | "websocket" | "sse";
+  responseMode?: "line" | "chunk";
+  responseFormat?: "text" | "json";
+  responseFilter?: any
+  responsePayload?: any
   controlledOutput?: { prefix?: string; content: string }[];
   typingDelay?: number;
   commandDelay?: number;
   websocketDelay?: number;
+  websocketInitialMessage?: string;
+  websocketTracking?: boolean;
+  websocketUrl?: string;
+  readonly?: boolean;
   theme?: "standard" | "material" | "desktop";
   onconnect?: () => void;
   onclose?: () => void;
@@ -24,7 +32,6 @@ export interface TerminalProps {
 }
 
 export const Terminal: React.FC<TerminalProps> = ({
-  websocketUrl = "ws://localhost:12345/ws",
   sseUrl = "http://localhost:12345/sse",
   sseMethod = "GET",
   sseCommandParam = "cmd",
@@ -32,12 +39,21 @@ export const Terminal: React.FC<TerminalProps> = ({
   initialContent = "",
   initialCommands = [],
   initialReturns = [],
+  initialTypings = [],
   onInput,
   mode = "standard",
+  responseMode = "line",
+  responseFormat = "text",
+  responseFilter = {},
+  responsePayload = null,
   controlledOutput = [],
   typingDelay = 100,
   commandDelay = 500,
   websocketDelay = 0,
+  websocketInitialMessage = "",
+  websocketTracking = false,
+  websocketUrl = "ws://localhost:12345/ws",
+  readonly = false,
   theme = "standard",
   onconnect,
   onclose,
@@ -52,9 +68,10 @@ export const Terminal: React.FC<TerminalProps> = ({
   const outputRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const websocketRef = useRef<WebSocket | null>(null);
-  const hasInitializedRef = useRef(false);
+  const hasWebsocketInitializedRef = useRef(false);
+  const hasWebsocketOpenedRef = useRef(false);
 
-  const showInput = mode !== "controlled";
+  const showInput = mode !== "controlled" && !readonly;
   const getPrompt = (index: number) =>
     mode === "websocket" ? wsPrompt : index === 0 ? "$" : ">";
 
@@ -67,8 +84,8 @@ export const Terminal: React.FC<TerminalProps> = ({
 
   // WebSocket or controlled init (run once)
   useEffect(() => {
-    if (hasInitializedRef.current) return;
-    hasInitializedRef.current = true;
+    if (hasWebsocketInitializedRef.current) return;
+    hasWebsocketInitializedRef.current = true;
 
     if (inputRef.current) {
       inputRef.current.focus();
@@ -90,32 +107,88 @@ export const Terminal: React.FC<TerminalProps> = ({
         websocketRef.current = ws;
 
         ws.onopen = () => {
-          setDisplayedOutput((prev) => [...prev, { content: "WebSocket connection established." }]);
+          hasWebsocketOpenedRef.current = true;
+
+          if (websocketInitialMessage) {
+            ws.send(websocketInitialMessage + "\n");
+          } 
+    
+          if (websocketTracking) {
+            setDisplayedOutput((prev) => [...prev, { content: "WebSocket connection established." }]);
+          }
+
           onconnect?.();
         };
 
         ws.onclose = () => {
-          setDisplayedOutput((prev) => [...prev, { content: "WebSocket connection closed." }]);
+          if (websocketTracking) {
+            setDisplayedOutput((prev) => [...prev, { content: "WebSocket connection closed." }]);
+          }
+
           onclose?.();
         };
 
         ws.onmessage = (e) => {
           const msg = e.data;
-          const lines = msg.split("\n");
-          const last = lines.pop() ?? "";
-          const output = lines.map((l:string) => ({ content: l }));
+    
+          let output: any;
+          let last: any;
+    
+          switch (responseMode) {
+            case "chunk":
+              const lines = msg.split("\n");
+              last = lines.pop() ?? "";
+              output = lines.map((l:string) => ({ content: l }));
+            break;
+            case "line":
+            default:
+              switch(responseFormat) {
+                case "json":
+                  try {
+                    if (responseFilter) {
+                      const parsedMsg = JSON.parse(msg)
+    
+                      for (let key in responseFilter) {
+                        if (parsedMsg[key] !== responseFilter[key]) {
+                          return;
+                        }
+                      }
+                    }
+                    if (responsePayload) {
+                      const parsedMsg = JSON.parse(msg);
+    
+                      output = [{ content: parsedMsg[responsePayload] }];
+                    }
+                  } catch (err) {
+                    output = [{ content: msg }] 
+                  }
+                break;
+                case "text":
+                  output = [{ content: msg }] 
+                break;
+              }
+
+            break;
+          };
+    
           if (output.length) {
             setDisplayedOutput((prev) => [...prev, ...output]);
           }
-          setWsPrompt(last);
-        };
+          if (last !== undefined) {
+            setWsPrompt(last);
+          } else {
+            setWsPrompt("")
+          }
+        }
       };
 
       connect();
     }
 
     return () => {
-      websocketRef.current?.close();
+      if (hasWebsocketOpenedRef.current) {
+        websocketRef.current?.close();
+      }
     };
   }, [mode]);
 
@@ -279,7 +352,7 @@ export const Terminal: React.FC<TerminalProps> = ({
       <div className="terminal" ref={outputRef}>
         {displayedOutput.map((line, idx) => (
           <div key={idx} className="terminal-output">
-            {line.prefix && <span className="terminal-prefix">{line.prefix}</span>}
+            {line.prefix && line.prefix.length > 0 && <span className="terminal-prefix">{line.prefix}</span>}
             {line.content}
           </div>
         ))}
